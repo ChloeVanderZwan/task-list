@@ -5,30 +5,35 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 beforeAll(async () => {
   await db.connect();
-  await db.query("BEGIN");
 });
 afterAll(async () => {
-  await db.query("ROLLBACK");
   await db.end();
 });
 
 describe("/users router", () => {
   describe("POST /users/register", () => {
     it("creates a new user and sends back a token", async () => {
+      const uniqueUsername = `newuser${Date.now()}`;
       const response = await request(app).post("/users/register").send({
-        username: "tasktesttask",
-        password: "password",
+        username: uniqueUsername,
+        password: "password"
       });
       expect(response.status).toBe(201);
       expect(response.text).toMatch(/\w+\.\w+\.\w+/);
     });
 
     it("hashes the password of the created user", async () => {
+      const uniqueUsername = `newuser${Date.now()}`;
+      await request(app).post("/users/register").send({
+        username: uniqueUsername,
+        password: "password"
+      });
+
       const {
-        rows: [user],
-      } = await db.query(
-        "SELECT password FROM users WHERE username = 'tasktesttask'",
-      );
+        rows: [user]
+      } = await db.query("SELECT password FROM users WHERE username = $1", [
+        uniqueUsername
+      ]);
       expect(user.password).not.toBe("password");
     });
   });
@@ -37,7 +42,7 @@ describe("/users router", () => {
     it("sends a token if correct credentials are provided", async () => {
       const response = await request(app).post("/users/login").send({
         username: "tasktesttask",
-        password: "password",
+        password: "password"
       });
       expect(response.status).toBe(200);
       expect(response.text).toMatch(/\w+\.\w+\.\w+/);
@@ -46,7 +51,7 @@ describe("/users router", () => {
     it("sends 401 if incorrect credentials are provided", async () => {
       const response = await request(app).post("/users/login").send({
         username: "tasktesttask",
-        password: "wrongpassword",
+        password: "wrongpassword"
       });
       expect(response.status).toBe(401);
     });
@@ -61,6 +66,12 @@ describe("/tasks router", () => {
   let taskId;
 
   beforeAll(async () => {
+    // Create the user first since database was truncated
+    await request(app).post("/users/register").send({
+      username: "tasktesttask",
+      password: "password"
+    });
+
     const response = await request(app)
       .post("/users/login")
       .send({ username: "tasktesttask", password: "password" });
@@ -69,22 +80,18 @@ describe("/tasks router", () => {
 
   describe("POST /tasks", () => {
     it("sends 400 if the body is missing required fields", async () => {
-      await db.query("SAVEPOINT s");
       const response = await request(app)
         .post("/tasks")
         .send({})
         .set("Authorization", `Bearer ${token}`);
       expect(response.status).toBe(400);
-      await db.query("ROLLBACK TO s");
     });
 
     it("sends 401 if a valid token is not attached", async () => {
-      await db.query("SAVEPOINT s");
       const response = await request(app)
         .post("/tasks")
         .send({ title: "New Task", description: "Task description" });
       expect(response.status).toBe(401);
-      await db.query("ROLLBACK TO s");
     });
 
     it("creates a new task and sends it back with status 201", async () => {
@@ -111,7 +118,7 @@ describe("/tasks router", () => {
         .set("Authorization", `Bearer ${token}`);
       expect(response.status).toBe(200);
       expect(response.body).toEqual(
-        expect.arrayContaining([expect.objectContaining(task)]),
+        expect.arrayContaining([expect.objectContaining(task)])
       );
     });
   });
@@ -126,7 +133,7 @@ describe("/tasks router", () => {
 
     it("sends 403 if the user does not own the task", async () => {
       const response = await request(app)
-        .put("/tasks/1")
+        .put("/tasks/999")
         .send(updatedTask)
         .set("Authorization", `Bearer ${token}`);
       expect(response.status).toBe(403);
@@ -150,7 +157,7 @@ describe("/tasks router", () => {
 
     it("sends 403 if the user does not own the task", async () => {
       const response = await request(app)
-        .delete("/tasks/1")
+        .delete("/tasks/999")
         .set("Authorization", `Bearer ${token}`);
       expect(response.status).toBe(403);
     });

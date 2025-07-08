@@ -1,7 +1,19 @@
 import express from "express";
-const app = express();
-export default app;
+import getUserFromToken from "#middleware/getUserFromToken";
+import usersRouter from "#routes/users";
+import tasksRouter from "#routes/tasks";
 
+const app = express();
+
+// Middleware
+app.use(express.json());
+app.use(getUserFromToken);
+
+// Routes
+app.use("/users", usersRouter);
+app.use("/tasks", tasksRouter);
+
+// Error handling
 app.use((err, req, res, next) => {
   switch (err.code) {
     // Invalid type
@@ -21,3 +33,5 @@ app.use((err, req, res, next) => {
   console.error(err);
   res.status(500).send("Sorry! Something went wrong.");
 });
+
+export default app;
